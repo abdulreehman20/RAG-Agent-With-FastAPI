@@ -20,6 +20,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "aiosqlite>=0.22.1",
+    "httpx2>=2.4.0",
     "pytest>=9.1.0",
     "pytest-asyncio>=1.4.0",
 ]
@@ -39,6 +40,8 @@ asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 pythonpath = ["src"]
 testpaths = ["tests"]
+# Clearer console output (one line per test; colors when supported; short tracebacks)
+addopts = ["-v", "--tb=short", "--color=yes", "-ra"]
 
 [tool.ruff]
 line-length = 100

@@ -7,7 +7,7 @@ import asyncio
 from pathlib import Path
 
 import pytest
-from starlette.testclient import TestClient
+from fastapi.testclient import TestClient
 
 
 @pytest.fixture
