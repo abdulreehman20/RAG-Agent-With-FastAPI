@@ -12,8 +12,5 @@ wheels/
 # Environment variables
 .env
 
-# Cursor
+# Cursor (local IDE / hooks state — never commit)
 .cursor/
-.cursor/hooks/
-.cursor/hooks/state/
-.cursor/hooks/state/continual-learning.json
