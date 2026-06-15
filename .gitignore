@@ -8,3 +8,12 @@ wheels/
 
 # Virtual environments
 .venv
+
+# Environment variables
+.env
+
+# Cursor
+.cursor/
+.cursor/hooks/
+.cursor/hooks/state/
+.cursor/hooks/state/continual-learning.json
