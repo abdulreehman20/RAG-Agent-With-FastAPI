@@ -1,0 +1,1 @@
+"""LangChain embedding factory."""

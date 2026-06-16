@@ -19,8 +19,19 @@ class UserRead(BaseModel):
 
 
 class UserUpdate(BaseModel):
+    """Only send fields you want to change. Body must be strict JSON (comma between each property)."""
+
     full_name: str | None = Field(default=None, max_length=255)
     password: str | None = Field(default=None, min_length=8, max_length=128)
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "examples": [
+                {"full_name": "Jane Doe", "password": "newpassword1"},
+                {"full_name": "Jane Doe"},
+            ],
+        },
+    )
 
 
 class UserLogin(BaseModel):

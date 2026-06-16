@@ -1,3 +1,7 @@
+[build-system]
+requires = ["hatchling>=1.26.0"]
+build-backend = "hatchling.build"
+
 [project]
 name = "fastapi-rag-agent"
 version = "0.1.0"
@@ -11,21 +15,39 @@ dependencies = [
     "email-validator>=2.3.0",
     "fastapi[standard]>=0.137.1",
     "httpx>=0.28.1",
+    "langchain-google-genai>=4.2.5",
+    "langchain-hyperbrowser>=0.4.1",
+    "langchain-qdrant>=1.1.0",
+    "langchain-text-splitters>=1.1.2",
     "psycopg2-binary>=2.9.12",
     "pydantic-settings>=2.14.1",
     "python-jose[cryptography]>=3.5.0",
+    "qdrant-client>=1.18.0",
     "sqlmodel>=0.0.38",
 ]
 
 [project.optional-dependencies]
 dev = [
     "aiosqlite>=0.22.1",
+    "httpx2>=2.4.0",
     "pytest>=9.1.0",
     "pytest-asyncio>=1.4.0",
 ]
 
+# Install `app` from `src/app` (editable `uv sync` / `uv run` — no per-file sys.path hacks).
 [tool.hatch.build.targets.wheel]
 packages = ["src/app"]
+
+[tool.hatch.build.targets.wheel.sources]
+"src/app" = "app"
+
+[tool.uv]
+package = true
+# langchain-hyperbrowser still declares langchain-core<0.4; this project uses LC 1.x (e.g. langchain-google-genai).
+# Override so HyperbrowserLoader resolves against the same langchain-core as the rest of the stack.
+override-dependencies = [
+    "langchain-core>=1.3.2",
+]
 
 [tool.hatch.build.targets.sdist]
 include = [
@@ -39,6 +61,8 @@ asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 pythonpath = ["src"]
 testpaths = ["tests"]
+# Clearer console output (one line per test; colors when supported; short tracebacks)
+addopts = ["-v", "--tb=short", "--color=yes", "-ra"]
 
 [tool.ruff]
 line-length = 100
