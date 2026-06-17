@@ -134,6 +134,23 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("COLLECTION_NAME", "collection_name"),
     )
 
+    # RAG ingestion / retrieval
+    chunk_size: int = Field(
+        default=1000,
+        ge=1,
+        validation_alias=AliasChoices("CHUNK_SIZE", "chunk_size"),
+    )
+    chunk_overlap: int = Field(
+        default=200,
+        ge=0,
+        validation_alias=AliasChoices("CHUNK_OVERLAP", "chunk_overlap"),
+    )
+    rag_retrieval_k: int = Field(
+        default=4,
+        ge=1,
+        validation_alias=AliasChoices("RAG_RETRIEVAL_K", "rag_retrieval_k"),
+    )
+
     @field_validator("distance", mode="before")
     @classmethod
     def _coerce_distance(cls, value: object) -> object:
