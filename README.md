@@ -15,7 +15,7 @@ With `uv sync`, the `app` package is installed in editable mode, so you can run 
 uv run python src/app/agents/embeddings.py
 ```
 
-Copy `.env.example` to `.env` and fill in secrets.
+Copy `.env.example` to `.env` in the project root and fill in secrets (`.env` is gitignored and is not committed).
 
 ## RAG embeddings + Qdrant
 
