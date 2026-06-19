@@ -1,13 +1,20 @@
+# Example signup / login bodies (replace with your own test data — do not commit real credentials)
+
+# POST /api/v1/auth/signup
 {
-  "email": "abdulreehman104@gmail.com",
-  "password": "@Abdul123456",
-  "full_name": "Abdul Rehman"
+  "email": "user@example.com",
+  "password": "use-a-strong-password",
+  "full_name": "Test User"
 }
 
-	
-Response body
-Download
+# Example auth response shape
 {
-  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxIiwiZXhwIjoxNzgxNTMyNTI1fQ.UakAwkCDZIQHRKKwL4LNZdmlcTPbxJSlchttQXd_yPs",
+  "access_token": "<jwt>",
   "token_type": "bearer"
 }
+
+# Step 01 -- Setup Vector Store
+# Step 02 -- Ingestion pipeline (app/agents/ingestion_pipline.py)
+    - HyperbrowserLoader: RAG_INGEST_URLS + HYPERBROWSER_API_KEY (LangChain doc: hyperbrowser loader)
+    - Load Websites & Create Text Splits
+    - Then Create Chunks & Make embeddings & Add it to vector stores

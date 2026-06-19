@@ -17,6 +17,9 @@ def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
     db_url = f"sqlite+aiosqlite:///{db_file.resolve().as_posix()}"
     monkeypatch.setenv("DATABASE_URL", db_url)
     monkeypatch.setenv("SECRET_KEY", "test-secret-key-for-jwt-signing-32bytes-min")
+    monkeypatch.setenv("GOOGLE_API_KEY", "test-google-api-key")
+    monkeypatch.setenv("QDRANT_URL", "http://localhost:6333")
+    monkeypatch.setenv("QDRANT_API_KEY", "test-qdrant-api-key")
 
     from app.core.config import get_settings
 
