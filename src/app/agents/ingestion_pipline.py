@@ -1,24 +1,24 @@
 from __future__ import annotations
 
-import uuid
 import asyncio
 
 from langchain_core.documents import Document
 from langchain_core.utils import get_from_env
 from langchain_hyperbrowser import HyperbrowserLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from qdrant_client.models import PointStruct
 
 from app.agents.embeddings import get_embeddings
 from app.core.config import get_settings
-from app.db.vector_store import get_qdrant_client
+from app.db.vector_store import upsert_document_chunks
 
 
 def _resolve_hyperbrowser_api_key(api_key: str) -> str:
     key = (api_key or "").strip()
     if key:
         return key
-    return (get_from_env("HYPERBROWSER_API_KEY", env_key="HYPERBROWSER_API_KEY") or "").strip()
+    return (
+        get_from_env("HYPERBROWSER_API_KEY", env_key="HYPERBROWSER_API_KEY") or ""
+    ).strip()
 
 
 async def ingestion_pipline(url: str) -> dict[str, int | str]:
@@ -32,7 +32,6 @@ async def ingestion_pipline(url: str) -> dict[str, int | str]:
             "HYPERBROWSER_API_KEY is not set. Add it to .env (https://app.hyperbrowser.ai/)."
         )
 
-
     # --- Stage 1: Load website data ---
     print("\n=== Stage 1: Load Website Data ===")
     loader = HyperbrowserLoader(
@@ -40,7 +39,7 @@ async def ingestion_pipline(url: str) -> dict[str, int | str]:
         api_key=api_key,
         operation=settings.hyperbrowser_operation,
     )
-    
+
     documents: list[Document] = await loader.aload()
 
     if not documents:
@@ -52,7 +51,6 @@ async def ingestion_pipline(url: str) -> dict[str, int | str]:
         print(f"Content preview:\n{document.page_content[:500]}")
         if len(document.page_content) > 500:
             print("...")
-
 
     # --- Stage 2: Chunk the document ---
     print("\n=== Stage 2: Chunk the Document ===")
@@ -73,7 +71,6 @@ async def ingestion_pipline(url: str) -> dict[str, int | str]:
 
     print(f"\nTotal chunks: {len(chunks)}")
 
-
     # --- Stage 3: Generate embeddings and store in Qdrant ---
     print("\n=== Stage 3: Generate Embeddings & Store in Qdrant ===")
 
@@ -86,23 +83,10 @@ async def ingestion_pipline(url: str) -> dict[str, int | str]:
         preview = ", ".join(f"{value:.6f}" for value in vector[:8])
         print(f"Embedding {index}: dims={len(vector)}, values=[{preview}, ...]")
 
-    client = get_qdrant_client()
-    points = [
-        PointStruct(
-            id=str(uuid.uuid4()),
-            vector=vector,
-            payload={
-                "page_content": chunk.page_content,
-                "metadata": chunk.metadata,
-            },
-        )
-        for chunk, vector in zip(chunks, vectors, strict=True)
-    ]
-
-    client.upsert(collection_name=settings.collection_name, points=points)
+    chunks_saved = await asyncio.to_thread(upsert_document_chunks, chunks, vectors)
 
     print(
-        f"\nSuccess: {len(chunks)} chunk(s) converted to embeddings and saved "
+        f"\nSuccess: {chunks_saved} chunk(s) converted to embeddings and saved "
         f"to Qdrant collection '{settings.collection_name}'."
     )
 
@@ -110,10 +94,14 @@ async def ingestion_pipline(url: str) -> dict[str, int | str]:
         "url": url.strip(),
         "documents_loaded": len(documents),
         "chunks_created": len(chunks),
-        "chunks_saved": len(points),
+        "chunks_saved": chunks_saved,
         "collection": settings.collection_name,
     }
 
 
 if __name__ == "__main__":
-    asyncio.run(ingestion_pipline("https://www.abduls.xyz/blogs/intro-to-retrieval-augmented-generation"))
+    asyncio.run(
+        ingestion_pipline(
+            "https://www.abduls.xyz/blogs/intro-to-retrieval-augmented-generation"
+        )
+    )
