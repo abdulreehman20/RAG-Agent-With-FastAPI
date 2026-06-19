@@ -15,6 +15,8 @@ from qdrant_client.models import Distance
 # ---------------------------------------------------------------------------
 PROJECT_EMBEDDING_MODEL_ID: str = "models/gemini-embedding-001"
 PROJECT_EMBEDDING_VECTOR_DIMENSIONS: int = 768
+# Chat model for RAG / agents (Gemini API generateContent)
+PROJECT_GEMINI_CHAT_MODEL_ID: str = "models/gemini-2.5-flash"
 
 
 class Settings(BaseSettings):
@@ -53,8 +55,53 @@ class Settings(BaseSettings):
         ..., validation_alias=AliasChoices("GOOGLE_API_KEY", "google_api_key")
     )
     gemini_model: str = Field(
-        default="models/gemini-2.5-flash",
+        default=PROJECT_GEMINI_CHAT_MODEL_ID,
         validation_alias=AliasChoices("GEMINI_MODEL", "gemini_model"),
+    )
+
+    @field_validator("gemini_model", mode="before")
+    @classmethod
+    def _normalize_gemini_model(cls, value: object) -> object:
+        """Ensure models/ prefix and map retired 1.5 ids to a supported chat model."""
+        if not isinstance(value, str):
+            return value
+        v = value.strip()
+        if not v:
+            return v
+        bare = v.removeprefix("models/")
+        retired = {
+            "gemini-1.5-flash": PROJECT_GEMINI_CHAT_MODEL_ID,
+            "gemini-1.5-flash-latest": PROJECT_GEMINI_CHAT_MODEL_ID,
+            "gemini-1.5-flash-8b": PROJECT_GEMINI_CHAT_MODEL_ID,
+            "gemini-1.5-pro": "models/gemini-2.5-pro",
+            "gemini-1.5-pro-latest": "models/gemini-2.5-pro",
+        }
+        if bare in retired:
+            return retired[bare]
+        if v.startswith("models/"):
+            return v
+        return f"models/{bare}"
+
+    gemini_temperature: float = Field(
+        default=0.2,
+        ge=0.0,
+        le=1.0,
+        validation_alias=AliasChoices(
+            "GEMINI_TEMPERATURE",
+            "gemini_temperature",
+            "TEMPERATURE",
+            "temperature",
+        ),
+    )
+    gemini_max_output_tokens: int = Field(
+        default=2048,
+        ge=1,
+        validation_alias=AliasChoices(
+            "GEMINI_MAX_OUTPUT_TOKENS",
+            "gemini_max_output_tokens",
+            "MAX_OUTPUT_TOKENS",
+            "max_output_tokens",
+        ),
     )
 
     embedding_model: str = Field(
@@ -120,6 +167,22 @@ class Settings(BaseSettings):
     qdrant_api_key: str = Field(
         ..., validation_alias=AliasChoices("QDRANT_API_KEY", "qdrant_api_key")
     )
+    qdrant_timeout: int = Field(
+        default=120,
+        ge=5,
+        validation_alias=AliasChoices("QDRANT_TIMEOUT", "qdrant_timeout"),
+        description="HTTP timeout (seconds) for Qdrant Cloud upserts and queries.",
+    )
+    qdrant_upsert_batch_size: int = Field(
+        default=16,
+        ge=1,
+        le=256,
+        validation_alias=AliasChoices(
+            "QDRANT_UPSERT_BATCH_SIZE",
+            "qdrant_upsert_batch_size",
+        ),
+        description="Points per upsert request during ingestion (smaller = more reliable on slow links).",
+    )
     distance: Distance = Field(
         default=Distance.COSINE, validation_alias=AliasChoices("DISTANCE", "distance")
     )
@@ -150,6 +213,15 @@ class Settings(BaseSettings):
         ge=1,
         validation_alias=AliasChoices("RAG_RETRIEVAL_K", "rag_retrieval_k"),
     )
+
+    @field_validator("qdrant_url", mode="after")
+    @classmethod
+    def _normalize_qdrant_url(cls, value: str) -> str:
+        """Qdrant Cloud serves HTTPS on 443; explicit :6333 often causes connect timeouts."""
+        url = value.strip().rstrip("/")
+        if ".cloud.qdrant.io:6333" in url:
+            return url.replace(":6333", "")
+        return url
 
     @field_validator("distance", mode="before")
     @classmethod
