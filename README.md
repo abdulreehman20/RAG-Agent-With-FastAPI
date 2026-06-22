@@ -109,6 +109,40 @@ uv run python -m uvicorn app.main:app --reload --app-dir src/app
 
 On Windows, if `fastapi dev` is blocked by Application Control, use the `uvicorn` command above.
 
+---
+
+## Streamlit UI
+
+A browser UI lives in `src/streamlit/` and talks to the FastAPI backend over HTTP.
+
+### 1. Start the API (terminal 1)
+
+```bash
+uv run python -m uvicorn app.main:app --reload --app-dir src/app
+```
+
+### 2. Start Streamlit (terminal 2)
+
+```bash
+uv run streamlit run src/streamlit/app.py
+```
+
+Open the URL Streamlit prints (usually http://localhost:8501).
+
+### UI flow
+
+1. **Login / Sign up** — uses `POST /api/v1/auth/login` and `POST /api/v1/auth/signup`
+2. **Sidebar** — paste a website URL and click **Ingest URL** (`POST /api/v1/rag/ingest-data`)
+3. **Chat** — ask questions in the main area (`POST /api/v1/rag/query-data`)
+
+Optional env var (in `.env` or shell):
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `API_BASE_URL` | `http://127.0.0.1:8000` | FastAPI base URL for the UI |
+| `STREAMLIT_INGEST_TIMEOUT` | `600` | Seconds to wait for ingestion |
+| `STREAMLIT_QUERY_TIMEOUT` | `120` | Seconds to wait for RAG answers |
+
 ### Run agent scripts directly
 
 ```bash
@@ -209,15 +243,12 @@ Tests use an isolated SQLite database and mock RAG external calls — they do no
 ## Project structure
 
 ```
-src/app/
-├── api/v1/          # FastAPI routes (auth, users, rag)
-├── agents/          # LangChain: ingestion, retrieval, LLM, agent
-├── core/            # Settings, security
-├── db/              # SQLAlchemy session, Qdrant vector store
-├── models/          # SQLModel tables
-├── schemas/         # Pydantic request/response models
-├── services/        # Business logic (users, RAG)
-└── main.py          # FastAPI app entrypoint
+src/
+├── app/             # FastAPI backend
+│   ├── api/v1/      # Routes (auth, users, rag)
+│   ├── agents/      # LangChain: ingestion, retrieval, LLM, agent
+│   └── ...
+└── streamlit/       # Streamlit UI (app.py, api_client.py, config.py)
 tests/               # pytest suite
 ```
 

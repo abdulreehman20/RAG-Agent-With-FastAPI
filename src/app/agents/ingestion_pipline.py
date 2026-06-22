@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import os
 
 from langchain_core.documents import Document
-from langchain_core.utils import get_from_env
 from langchain_hyperbrowser import HyperbrowserLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
@@ -16,9 +16,8 @@ def _resolve_hyperbrowser_api_key(api_key: str) -> str:
     key = (api_key or "").strip()
     if key:
         return key
-    return (
-        get_from_env("HYPERBROWSER_API_KEY", env_key="HYPERBROWSER_API_KEY") or ""
-    ).strip()
+    # os.getenv — not langchain get_from_env, which raises when the var is unset.
+    return (os.getenv("HYPERBROWSER_API_KEY") or "").strip()
 
 
 async def ingestion_pipline(url: str) -> dict[str, int | str]:

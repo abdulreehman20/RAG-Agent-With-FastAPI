@@ -24,6 +24,7 @@ dependencies = [
     "python-jose[cryptography]>=3.5.0",
     "qdrant-client>=1.18.0",
     "sqlmodel>=0.0.38",
+    "streamlit>=1.40.0",
 ]
 
 [project.optional-dependencies]
