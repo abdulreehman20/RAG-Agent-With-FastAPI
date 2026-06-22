@@ -1,17 +1,18 @@
 # FastAPI RAG Agent
 
-An async **FastAPI** backend that combines **JWT authentication**, **PostgreSQL (Neon)**, and a full **Retrieval-Augmented Generation (RAG)** stack. Ingest content from websites, store vector embeddings in **Qdrant**, and answer user questions with **Google Gemini** using retrieved context.
+An async **FastAPI** backend with **JWT authentication**, **PostgreSQL (Neon)**, and a full **Retrieval-Augmented Generation (RAG)** pipeline. Scrape website content with **Hyperbrowser**, store embeddings in **Qdrant**, and answer questions with **Google Gemini**. Includes a **Streamlit** chat UI that talks to the API over HTTP.
 
 ---
 
 ## What is this project?
 
-This is a production-style API for building **AI assistants over your own data**. You can:
+This is a production-style API for building **AI assistants over your own data**:
 
-1. **Ingest** a website or blog URL — scrape content, split it into chunks, embed it, and save vectors to Qdrant.
-2. **Query** — ask natural-language questions; the system retrieves relevant chunks and generates grounded answers with Gemini.
+1. **Ingest** — scrape a URL, split it into chunks, embed with Gemini, and upsert vectors into Qdrant.
+2. **Query** — ask natural-language questions; the system retrieves relevant chunks and generates grounded answers.
+3. **Authenticate** — signup, login, and user CRUD backed by Neon Postgres and JWT.
 
-It also includes **user signup/login** and **CRUD** for user accounts, so RAG features can sit behind authenticated APIs in real applications.
+The Streamlit app (`src/streamlit/`) provides login/signup, a sidebar to ingest URLs, and a chat interface for RAG Q&A.
 
 ---
 
@@ -19,37 +20,39 @@ It also includes **user signup/login** and **CRUD** for user accounts, so RAG fe
 
 | Benefit | Description |
 |--------|-------------|
-| **Grounded answers** | RAG reduces hallucinations by answering from your ingested documents, not only the model’s training data. |
-| **Fresh knowledge** | Add or re-ingest URLs anytime; no need to retrain a model. |
-| **Modular stack** | Clear separation: API routes → services → agents → vector store. |
+| **Grounded answers** | RAG reduces hallucinations by answering from ingested documents, not only the model’s training data. |
+| **Fresh knowledge** | Re-ingest URLs anytime — no model retraining required. |
+| **Modular stack** | Clear layers: API routes → services → agents → vector store / database. |
 | **Async-first** | FastAPI + async SQLAlchemy for scalable I/O-bound workloads. |
-| **Cloud-ready** | Works with Neon Postgres, Qdrant Cloud, Google Gemini API, and Hyperbrowser for scraping. |
+| **Cloud-ready** | Neon Postgres, Qdrant Cloud, Google Gemini API, and Hyperbrowser scraping. |
+| **Browser UI included** | Streamlit frontend for auth, ingestion, and chat without writing a separate client. |
 
 ---
 
 ## Tech stack
 
-- **API:** FastAPI, Pydantic, Uvicorn  
-- **Auth:** JWT (python-jose), bcrypt  
-- **Database:** SQLModel / SQLAlchemy, asyncpg, Neon PostgreSQL  
-- **RAG:** LangChain, Google Gemini (chat + embeddings), Qdrant  
-- **Ingestion:** HyperbrowserLoader (web scraping)  
-- **Tooling:** uv, pytest  
+| Layer | Tools |
+|-------|-------|
+| **API** | FastAPI, Pydantic, Uvicorn |
+| **Auth** | JWT (python-jose), bcrypt |
+| **Database** | SQLModel / SQLAlchemy, asyncpg, Neon PostgreSQL |
+| **RAG** | LangChain (LCEL), Google Gemini (chat + embeddings), Qdrant |
+| **Ingestion** | HyperbrowserLoader, RecursiveCharacterTextSplitter |
+| **UI** | Streamlit, httpx |
+| **Tooling** | uv, pytest, ruff |
 
 ---
 
 ## Prerequisites
 
-Before you start, install:
-
-| Requirement | Version / notes |
-|-------------|-----------------|
+| Requirement | Notes |
+|-------------|-------|
 | [Python](https://www.python.org/downloads/) | **3.13+** |
-| [uv](https://docs.astral.sh/uv/) | Package manager (recommended) |
-| PostgreSQL | [Neon](https://neon.tech) serverless Postgres (or any Postgres with `asyncpg` URL) |
+| [uv](https://docs.astral.sh/uv/) | Recommended package manager |
+| PostgreSQL | [Neon](https://neon.tech) or any Postgres with an `asyncpg` URL |
 | Qdrant | [Qdrant Cloud](https://cloud.qdrant.io) or local Qdrant on port `6333` |
 | Google AI API key | [Google AI Studio](https://aistudio.google.com/apikey) — Gemini chat + embeddings |
-| Hyperbrowser API key | [Hyperbrowser](https://app.hyperbrowser.ai/) — required for URL ingestion |
+| Hyperbrowser API key | [Hyperbrowser](https://app.hyperbrowser.ai/) — **required for URL ingestion** |
 
 ---
 
@@ -76,26 +79,53 @@ This installs the project in **editable** mode so `import app` works from anywhe
 cp .env.example .env
 ```
 
-Edit `.env` in the **project root** and set at minimum:
+Edit `.env` in the **project root**. Required variables:
 
 | Variable | Purpose |
 |----------|---------|
 | `DATABASE_URL` | Async Postgres URL (`postgresql+asyncpg://...`) |
 | `SECRET_KEY` | Long random string for JWT signing |
-| `GOOGLE_API_KEY` | Gemini API key |
+| `GOOGLE_API_KEY` | Gemini API key (chat + embeddings) |
 | `QDRANT_URL` | Qdrant endpoint (cloud: `https://xxx.cloud.qdrant.io` — **no `:6333`**) |
 | `QDRANT_API_KEY` | Qdrant API key |
-| `HYPERBROWSER_API_KEY` | Required for `/rag/ingest-data` |
+| `HYPERBROWSER_API_KEY` | Required for `POST /rag/ingest-data` |
 
-> **Never commit `.env`.** It is listed in `.gitignore`.
+Optional tuning (defaults shown in `.env.example`):
 
-### 4. (Optional) Create the Qdrant collection
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `GEMINI_MODEL` | `models/gemini-2.5-flash` | Chat model (retired `gemini-1.5-*` ids are auto-mapped) |
+| `GEMINI_TEMPERATURE` | `0.2` | LLM temperature |
+| `GEMINI_MAX_OUTPUT_TOKENS` | `2048` | Max tokens per answer |
+| `EMBEDDING_MODEL` | `models/gemini-embedding-001` | Embedding model id |
+| `EMBEDDING_OUTPUT_DIMENSIONALITY` | `768` | Must equal `VECTOR_SIZE` |
+| `VECTOR_SIZE` | `768` | Qdrant dense vector dimensions |
+| `COLLECTION_NAME` | `rag_collection` | Qdrant collection name |
+| `DISTANCE` | `COSINE` | Qdrant distance metric |
+| `CHUNK_SIZE` / `CHUNK_OVERLAP` | `1000` / `200` | Text splitter settings |
+| `RAG_RETRIEVAL_K` | `4` | Top-k chunks retrieved per question |
+| `QDRANT_TIMEOUT` | `120` | Qdrant HTTP timeout (seconds) |
+| `QDRANT_UPSERT_BATCH_SIZE` | `16` | Points per upsert batch during ingest |
+| `HYPERBROWSER_OPERATION` | `scrape` | `scrape` (one or many URLs) or `crawl` (single seed URL) |
 
-The app auto-creates the collection on first ingest. If you change `VECTOR_SIZE` or embedding model dimensions, delete the old collection in Qdrant and ingest again.
+> **Never commit `.env`.** It is listed in `.gitignore`.  
+> **Restart the API** after changing `.env` — settings are loaded at startup.
+
+Embedding defaults are defined as constants in `src/app/core/config.py`:
+
+- `PROJECT_EMBEDDING_MODEL_ID` = `models/gemini-embedding-001`
+- `PROJECT_EMBEDDING_VECTOR_DIMENSIONS` = `768`
+- `PROJECT_GEMINI_CHAT_MODEL_ID` = `models/gemini-2.5-flash`
+
+Keep `EMBEDDING_MODEL`, `EMBEDDING_OUTPUT_DIMENSIONALITY`, and `VECTOR_SIZE` aligned. If you change dimensions, delete the old Qdrant collection (or use a new `COLLECTION_NAME`) and re-ingest.
+
+### 4. Qdrant collection
+
+The app auto-creates the collection on first ingest via `ensure_collection_exists()` in `src/app/db/vector_store.py`.
 
 ---
 
-## Run the server
+## Run the API
 
 From the project root:
 
@@ -103,17 +133,27 @@ From the project root:
 uv run python -m uvicorn app.main:app --reload --app-dir src/app
 ```
 
-- **API:** http://127.0.0.1:8000  
-- **Swagger UI:** http://127.0.0.1:8000/docs  
-- **Health check:** http://127.0.0.1:8000/health  
+Or, if your environment allows it:
 
-On Windows, if `fastapi dev` is blocked by Application Control, use the `uvicorn` command above.
+```bash
+fastapi dev src/app/main.py
+```
+
+| URL | Description |
+|-----|-------------|
+| http://127.0.0.1:8000 | API root |
+| http://127.0.0.1:8000/docs | Swagger UI |
+| http://127.0.0.1:8000/health | Health check |
+
+On Windows, if `fastapi.exe` / `uvicorn.exe` is blocked by Application Control, use the `uv run python -m uvicorn ...` command.
+
+Tables are created automatically on startup via SQLModel (`init_db()` in the app lifespan).
 
 ---
 
 ## Streamlit UI
 
-A browser UI lives in `src/streamlit/` and talks to the FastAPI backend over HTTP.
+A browser UI lives in `src/streamlit/` and calls the FastAPI backend over HTTP.
 
 ### 1. Start the API (terminal 1)
 
@@ -131,25 +171,18 @@ Open the URL Streamlit prints (usually http://localhost:8501).
 
 ### UI flow
 
-1. **Login / Sign up** — uses `POST /api/v1/auth/login` and `POST /api/v1/auth/signup`
-2. **Sidebar** — paste a website URL and click **Ingest URL** (`POST /api/v1/rag/ingest-data`)
-3. **Chat** — ask questions in the main area (`POST /api/v1/rag/query-data`)
+1. **Login / Sign up** — `POST /api/v1/auth/login` and `POST /api/v1/auth/signup`
+2. **Sidebar → Ingest URL** — `POST /api/v1/rag/ingest-data` (scraping can take 1–3 minutes)
+3. **Chat** — `POST /api/v1/rag/query-data`
 
-Optional env var (in `.env` or shell):
+Streamlit env vars (optional):
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `API_BASE_URL` | `http://127.0.0.1:8000` | FastAPI base URL for the UI |
-| `STREAMLIT_INGEST_TIMEOUT` | `600` | Seconds to wait for ingestion |
-| `STREAMLIT_QUERY_TIMEOUT` | `120` | Seconds to wait for RAG answers |
-
-### Run agent scripts directly
-
-```bash
-uv run python src/app/agents/embeddings.py
-uv run python src/app/agents/agent.py
-uv run python src/app/agents/ingestion_pipline.py
-```
+| `API_BASE_URL` | `http://127.0.0.1:8000` | FastAPI base URL |
+| `STREAMLIT_INGEST_TIMEOUT` | `600` | HTTP timeout for ingestion (seconds) |
+| `STREAMLIT_QUERY_TIMEOUT` | `120` | HTTP timeout for RAG answers (seconds) |
+| `STREAMLIT_AUTH_TIMEOUT` | `30` | HTTP timeout for auth requests (seconds) |
 
 ---
 
@@ -159,74 +192,114 @@ Base path: `/api/v1`
 
 ### Auth
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `POST` | `/auth/signup` | Register a new user |
-| `POST` | `/auth/login` | Login and receive JWT |
-| `GET` | `/auth/me` | Current user (Bearer token) |
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| `POST` | `/auth/signup` | No | Register a new user |
+| `POST` | `/auth/login` | No | Login and receive JWT |
+| `GET` | `/auth/me` | Bearer | Current user profile |
 
 ### Users (authenticated)
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `GET` | `/users/list-users` | List users |
-| `GET` | `/users/{user_id}` | Get user by ID |
-| `PUT` | `/users/{user_id}` | Update user |
-| `DELETE` | `/users/{user_id}` | Soft-delete user |
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| `GET` | `/users/list-users` | Bearer | List users (`skip`, `limit`) |
+| `GET` | `/users/{user_id}` | Bearer | Get user by ID |
+| `PUT` | `/users/{user_id}` | Bearer | Update user |
+| `DELETE` | `/users/{user_id}` | Bearer | Soft-delete user (`is_active = false`) |
 
 ### RAG
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `GET` | `/rag/rag-test` | Health check for RAG router |
-| `POST` | `/rag/ingest-data` | Ingest a URL into Qdrant |
-| `POST` | `/rag/query-data` | Ask a question (RAG answer) |
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| `GET` | `/rag/rag-test` | No | RAG router health check |
+| `POST` | `/rag/ingest-data` | No | Scrape URL → chunk → embed → Qdrant |
+| `POST` | `/rag/query-data` | No | RAG question answering |
 
-**Ingest example:**
+> **Note:** RAG endpoints are currently **public** (no JWT required). The Streamlit UI sends a Bearer token, but the API does not enforce it on `/rag/*`. User routes and `/auth/me` do require authentication.
 
-```json
+**Ingest request:**
+
+```http
 POST /api/v1/rag/ingest-data
+Content-Type: application/json
+
 {
   "url": "https://example.com/blog/your-article"
 }
 ```
 
-**Query example:**
+**Ingest response (201):**
 
 ```json
+{
+  "url": "https://example.com/blog/your-article",
+  "documents_loaded": 1,
+  "chunks_created": 12,
+  "chunks_saved": 12,
+  "collection": "rag_collection"
+}
+```
+
+**Query request:**
+
+```http
 POST /api/v1/rag/query-data
+Content-Type: application/json
+
 {
   "question": "What is retrieval-augmented generation?"
 }
 ```
 
+**Query response (200):**
+
+```json
+{
+  "question": "What is retrieval-augmented generation?",
+  "answer": "..."
+}
+```
+
+In Swagger, click **Authorize** → paste the `access_token` from `/auth/login` to call protected user endpoints.
+
 ---
 
-## How RAG works in this project
+## How RAG works
 
 ```
-URL  →  HyperbrowserLoader (scrape)
+URL  →  HyperbrowserLoader (scrape / crawl)
      →  RecursiveCharacterTextSplitter (chunks)
-     →  Google embeddings (768-dim)
-     →  Qdrant vector store
+     →  Google Gemini embeddings (768-dim)
+     →  Qdrant upsert (batched)
 
-Question  →  Similarity search (top-k chunks)
-          →  Gemini + context prompt
+Question  →  Qdrant similarity search (top-k)
+          →  LCEL chain: prompt | Gemini chat | StrOutputParser
           →  Grounded answer
 ```
 
-**Embedding defaults** live in `src/app/core/config.py`:
+### Code layout
 
-- `PROJECT_EMBEDDING_MODEL_ID` = `models/gemini-embedding-001`
-- `PROJECT_EMBEDDING_VECTOR_DIMENSIONS` = `768`
+| File | Role |
+|------|------|
+| `src/app/agents/ingestion_pipline.py` | 3-stage ingest: load → chunk → embed + upsert |
+| `src/app/agents/retrieval.py` | Qdrant retriever (`rag_retrieval_k`) |
+| `src/app/agents/agent.py` | `ask_agent()` — retrieve + generate |
+| `src/app/agents/prompts.py` | QA prompt template |
+| `src/app/agents/llm.py` | `ChatGoogleGenerativeAI` factory |
+| `src/app/agents/embeddings.py` | Gemini embedding model |
+| `src/app/db/vector_store.py` | Qdrant client, collection creation, batched upsert |
+| `src/app/services/rag_service.py` | Service layer for ingest + query |
+| `src/app/api/v1/rag.py` | HTTP routes + Qdrant error handling |
 
-Keep these aligned in `.env`:
+### Run agent scripts directly
 
-- `EMBEDDING_MODEL`
-- `EMBEDDING_OUTPUT_DIMENSIONALITY`
-- `VECTOR_SIZE`
+```bash
+uv run python src/app/agents/ingestion_pipline.py
+uv run python src/app/agents/agent.py
+uv run python src/app/agents/embeddings.py
+```
 
-If you change dimensions, **delete and recreate** the Qdrant collection (or use a new `COLLECTION_NAME`).
+The ingestion script uses a hardcoded sample URL in its `__main__` block. For batch CLI ingest from `.env`, set `RAG_INGEST_URLS` (comma-separated) and extend the script as needed.
 
 ---
 
@@ -236,20 +309,45 @@ If you change dimensions, **delete and recreate** the Qdrant collection (or use 
 uv run pytest tests/ -v
 ```
 
-Tests use an isolated SQLite database and mock RAG external calls — they do not require live Qdrant or Gemini for the API route tests.
+**17 tests** across auth, user CRUD, and RAG routes. Tests use an isolated SQLite database (`tests/conftest.py`) and mock external RAG calls — they do not require live Qdrant, Gemini, or Hyperbrowser.
 
 ---
 
 ## Project structure
 
 ```
-src/
-├── app/             # FastAPI backend
-│   ├── api/v1/      # Routes (auth, users, rag)
-│   ├── agents/      # LangChain: ingestion, retrieval, LLM, agent
-│   └── ...
-└── streamlit/       # Streamlit UI (app.py, api_client.py, config.py)
-tests/               # pytest suite
+fastapi-rag-agent/
+├── src/
+│   ├── app/                      # FastAPI backend (installable package)
+│   │   ├── main.py               # App factory, CORS, lifespan, /health
+│   │   ├── api/v1/
+│   │   │   ├── router.py         # Mounts auth, users, rag routers
+│   │   │   ├── auth.py           # Signup, login, /me, JWT dependency
+│   │   │   ├── users.py          # User CRUD (authenticated)
+│   │   │   └── rag.py            # Ingest + query endpoints
+│   │   ├── agents/               # LangChain RAG pipeline
+│   │   │   ├── ingestion_pipline.py
+│   │   │   ├── agent.py
+│   │   │   ├── retrieval.py
+│   │   │   ├── embeddings.py
+│   │   │   ├── llm.py
+│   │   │   └── prompts.py
+│   │   ├── core/
+│   │   │   ├── config.py         # Settings + PROJECT_* constants
+│   │   │   └── security.py       # JWT + password hashing
+│   │   ├── db/
+│   │   │   ├── session.py        # Async SQLAlchemy engine + init_db
+│   │   │   └── vector_store.py   # Qdrant client + upsert
+│   │   ├── models/user.py        # SQLModel User table
+│   │   ├── schemas/              # Pydantic request/response models
+│   │   └── services/             # Business logic (user, rag)
+│   └── streamlit/
+│       ├── app.py                # Login, ingest sidebar, chat UI
+│       ├── api_client.py         # httpx client for FastAPI
+│       └── config.py             # API URL + timeouts
+├── tests/                        # pytest (auth, users, rag)
+├── .env.example                  # Environment template
+└── pyproject.toml                # uv / hatch / pytest config
 ```
 
 ---
@@ -258,11 +356,15 @@ tests/               # pytest suite
 
 | Issue | Fix |
 |-------|-----|
-| `ValidationError` for missing env vars | Create `.env` from `.env.example` in project root |
+| `ValidationError` for missing env vars | Copy `.env.example` → `.env` in project root and fill required keys |
+| `HYPERBROWSER_API_KEY is not set` on ingest | Add key from [Hyperbrowser](https://app.hyperbrowser.ai/) to `.env`, restart API |
 | Qdrant timeout on ingest | Use cloud URL without `:6333`; increase `QDRANT_TIMEOUT`; lower `QDRANT_UPSERT_BATCH_SIZE` |
+| `VECTOR_SIZE` / `EMBEDDING_OUTPUT_DIMENSIONALITY` mismatch | Set both to the same value (default `768`) or update `PROJECT_*` in `config.py` |
 | Gemini `404` model not found | Set `GEMINI_MODEL=models/gemini-2.5-flash` |
+| Empty or wrong RAG answers | Ingest a URL first; check Qdrant collection has points |
 | `coroutine was never awaited` | Use `asyncio.run()` when calling async pipeline functions from scripts |
-| Windows blocks `fastapi.exe` | Use `uv run python -m uvicorn ...` |
+| Windows blocks `fastapi.exe` | Use `uv run python -m uvicorn app.main:app --reload --app-dir src/app` |
+| Streamlit ingest fails but API works | Ensure API is running on `API_BASE_URL`; check `STREAMLIT_INGEST_TIMEOUT` for slow scrapes |
 
 ---
 
